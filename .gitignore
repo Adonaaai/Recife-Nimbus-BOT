@@ -4,7 +4,6 @@
 # Ignore the generated Prisma client (required for v6.6.0+ ESM support)
 ./src/generated/prisma
 ./generated/prisma
-
 generated
 # Default node_modules location if not overridden
 node_modules/.prisma
@@ -15,6 +14,7 @@ docker-compose.yml
 # TYPESCRIPT BUILD ARTIFACTS
 # ==========================================
 # Ignore compiled JavaScript files and source maps
+apiResponses/
 dist/
 build/
 out/
