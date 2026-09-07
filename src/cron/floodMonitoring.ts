@@ -38,8 +38,8 @@ const wasRecentlySentCity = async (cityId: number): Promise<boolean> => {
 export const executeMonitoringCycle = async () => {
     console.log(`\n[SYSTEM] ${new Date().toLocaleString()} - Iniciando ciclo de varredura de telemetria...`);
 
-    const APAC_RIVER_URL = "https://geoportal.apac.pe.gov.br/server/rest/services/SIRH/mon_nivel_rios_pe/MapServer/0/query?where=1%3D1&outFields=*&f=json";
-    const APAC_RAIN_URL = "https://geoportal.apac.pe.gov.br/server/rest/services/met_monitoramento_chuvas_pe/MapServer/0/query?where=1%3D1&outFields=*&f=json";
+    const APAC_RIVER_URL = "https://api.apac.pe.gov.br/api.php/monitoramento_rios";
+    const APAC_RAIN_URL = "https://api.apac.pe.gov.br/api.php/precipitacao_acumulada";
 
     try {
         const cities = await prisma.city.findMany();
