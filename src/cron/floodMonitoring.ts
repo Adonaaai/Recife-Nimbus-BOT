@@ -6,6 +6,7 @@ import { getForecastTideHeight } from "./controllers/getForecastTideHeight.ts";
 import { getCurrentTideHeight } from "./controllers/getCurrentTideHeight.ts";
 import { calculateRisk } from "./controllers/calculateRisk.ts";
 import { getForecastRainMm } from "./controllers/getForecastRainMm.ts";
+import { calculateSituacao } from "./controllers/calculateSituacao.ts";
 import { bot } from "../lib/bot.ts";
 import { prisma } from "../lib/prisma.ts";
 import { buildMessage, buildCityChannelMessage } from "./controllers/buildMessage";
@@ -16,6 +17,19 @@ const plimit = pLimit(1);
 
 const timezoneValidate = validateTimezone("America/Recife");
 const timezone = timezoneValidate ? "America/Recife" : "UTC";
+
+const isRainValue = (value: unknown): value is number => {
+    return typeof value === "number" && Number.isFinite(value);
+};
+
+const normalizeRainSensor = (sensor: RainSensor): RainSensor => ({
+    ...sensor,
+    "1_hora": isRainValue(sensor["1_hora"]) ? sensor["1_hora"] : 0,
+    "3_horas": isRainValue(sensor["3_horas"]) ? sensor["3_horas"] : 0,
+    "3_hora": isRainValue(sensor["3_hora"]) ? sensor["3_hora"] : 0,
+    "24_horas": isRainValue(sensor["24_horas"]) ? sensor["24_horas"] : 0,
+    "24_hora": isRainValue(sensor["24_hora"]) ? sensor["24_hora"] : 0,
+});
 
 const wasRecentlySentZone = async (zoneId: number, severity: Severity): Promise<boolean> => {
     const minutes = severity === "RED" ? T.COOLDOWN_RED_MIN : T.COOLDOWN_YELLOW_MIN;
@@ -57,10 +71,10 @@ export const executeMonitoringCycle = async () => {
         ]);
 
         const rainSensors: RainSensor[] = rainResult.status === "fulfilled"
-            ? rainResult.value.data.features ?? []
+            ? rainResult.value.data ?? []
             : [];
         const riverSensors: RiverSensor[] = riverResult.status === "fulfilled"
-            ? riverResult.value.data.features ?? []
+            ? riverResult.value.data ?? []
             : [];
 
         if (rainResult.status === "rejected") {
@@ -97,41 +111,47 @@ export const executeMonitoringCycle = async () => {
 
                 const zoneRainSensor: RainSensor[] = rainSensors.filter((sensor) => {
                     return zone.rainSensorNames.some((dbName: string) => {
-                        const isOnline = sensor.attributes.hora_3 >= 0;
-                        return isOnline && dbName === sensor.attributes.nome;
+                        const hasMeasurement = isRainValue(sensor["1_hora"]) ||
+                            isRainValue(sensor["3_horas"]) ||
+                            isRainValue(sensor["24_horas"]);
+                        return hasMeasurement && dbName === sensor.estacao;
                     });
                 });
 
                 const zoneRiverSensors: RiverSensor[] = riverSensors.filter((sensor) => {
                     return zone.riverBasins.some((dbName: string) => {
-                        return dbName === sensor.attributes.namebasin &&
-                               sensor.attributes.alerta_tendencia !== "MA" &&
-                               sensor.attributes.recent === "s";
+                        return dbName === sensor.nome_bacia &&
+                               sensor.recente === 1;
                     });
                 });
 
-                const maxRainMm = zoneRainSensor.length > 0
-                    ? Math.max(...zoneRainSensor.map((s) => s.attributes.hora_1))
-                    : 0;
+                const normalizedRainSensors = zoneRainSensor.map(normalizeRainSensor);
 
-                const prolongedRain3h = zoneRainSensor.length > 0
-                    ? Math.max(...zoneRainSensor.map((s) => s.attributes.horas_3 ?? s.attributes.hora_3))
-                    : 0;
+                const maxRainMm = Math.max(...normalizedRainSensors.map((s) => s["1_hora"]))
 
-                const prolongedRain24h = zoneRainSensor.length > 0
-                    ? Math.max(...zoneRainSensor.map((s) => s.attributes.horas_24 ?? s.attributes.hora_24))
-                    : 0;
+                const prolongedRain3h = Math.max(...normalizedRainSensors.map((s) => s["3_horas"] ?? s["3_hora"]))
 
-                const worstRiverStation = zoneRiverSensors.length > 0
-                    ? zoneRiverSensors.reduce((worst, sensor) => {
-                        const currentScore = SEVERITY_ORDER[sensor.attributes.situacao as keyof typeof SEVERITY_ORDER] ?? 0;
-                        const worstScore = SEVERITY_ORDER[worst.attributes.situacao as keyof typeof SEVERITY_ORDER] ?? 0;
+                const prolongedRain24h = Math.max(...normalizedRainSensors.map((s) => s["24_horas"] ?? s["24_hora"]))
+
+                const normalizedRiverSensors : RiverSensor[] = zoneRiverSensors.map((sensor) => {
+                    const situacao = calculateSituacao(
+                        sensor.nivel_atual,
+                        sensor.nivel_pre_alerta,
+                        sensor.nivel_alerta,
+                        sensor.nivel_inundacao
+                    );
+                    return sensor.situacao = situacao, sensor;
+                });
+
+                const worstRiverStation = normalizedRiverSensors.reduce<RiverSensor | null>((worst, sensor) => {
+                        if (!worst) return sensor;
+                        const currentScore = SEVERITY_ORDER[sensor.situacao as keyof typeof SEVERITY_ORDER] ?? 0;
+                        const worstScore = SEVERITY_ORDER[worst.situacao as keyof typeof SEVERITY_ORDER] ?? 0;
                         return currentScore > worstScore ? sensor : worst;
-                    })
-                    : null;
+                    }, null);
 
-                const riverTendencia = worstRiverStation?.attributes.tendencia ?? null;
-                const riverSituacao = worstRiverStation?.attributes.situacao ?? null;
+                const riverTendencia = worstRiverStation?.tendencia ?? null;
+                const riverSituacao = worstRiverStation?.situacao ?? null;
 
                 const forecastMm = await plimit(() => getForecastRainMm(zone.latitude, zone.longitude));
 

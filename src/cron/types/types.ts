@@ -28,44 +28,80 @@ export const T = {
   // "as const" for never change in the runtime.
 } as const;
 
-// Rain sensors interface for predict APAC pluviometer API.
+export type ApacRainValue = number | "-" | null;
+
+// Raw response from /api.php/precipitacao_acumulada.
+export interface ApacRainSensor {
+  municipio: string;
+  codigo_municipio: number;
+  estacao: string;
+  latitude: number;
+  longitude: number;
+  bacia: string;
+  codigo_estacao: string;
+  data_hora_ultima_leitura: string | null;
+  precipitacao: number | null;
+  ultima_medicao: number | null;
+  "1_hora": ApacRainValue;
+  "3_horas": ApacRainValue;
+  "6_horas": ApacRainValue;
+  "12_horas": ApacRainValue;
+  "24_horas": ApacRainValue;
+  "48_horas": ApacRainValue;
+  "72_horas": ApacRainValue;
+  "96_horas": ApacRainValue;
+  "120_horas": ApacRainValue;
+}
+
+// Normalized rain sensor used by the risk engine.
 export interface RainSensor {
-  attributes: {
-    // The sensor name, e.g. "[CEMADEN] Areias"
-    nome: string,
-
-     // The river basin this sensor belongs to, e.g. "Capibaribe", "GL2"
-    bacia: string,
-
-    // City name, e.g. "Recife", "Jaboatão dos Guararapes"
-    municipio: string
-
-    // Rain in the LAST 1 HOUR in millimetres.
-    hora_1: number;
-
-    // Rain in the LAST 3 HOURS in millimetres (APAC field often called 'horas_3' or 'hora_3').
-    // Mark optional to tolerate sensors that don't provide it.
-    horas_3: number;
-    hora_3: number;
-
-    // Rain in the LAST 24 HOURS in millimetres (APAC field often called 'horas_24' or 'hora_24').
-    horas_24: number;
-    hora_24: number;
-
-  }
+  estacao: string,
+  bacia: string,
+  municipio: string;
+  "1_hora": number;
+  "3_horas": number;
+  "3_hora": number;
+  "24_horas": number;
+  "24_hora": number;
 };
+
+// Raw response from /api.php/monitoramento_rios.
+export interface ApacRiverSensor {
+  id: number;
+  estacao: string;
+  codigo_estacao: number | string;
+  nome_rio: string;
+  datacoleta: string;
+  horacoleta: string;
+  nivel_atual: number;
+  nivel_pre_alerta: number;
+  nivel_alerta: number;
+  nivel_inundacao: number;
+  alert_pcd: string;
+  data_hora_leitura: string | null;
+  nome_bacia: string;
+  id_bacia_hidrografica: number;
+  river_id: string;
+  alerta_validade: string | null;
+  inundacao_validade: string | null;
+  recente: 0 | 1;
+  latitude: number;
+  longitude: number;
+  codigo_municipio: string;
+  tendencia: "S" | "D" | "E" | string;
+}
 
 // River sensors interface for predict APAC fluviometer API.
 export interface RiverSensor {
-  attributes: {
-    namestation: string;
-    namebasin: string;
-    levelnow: number;
-    situacao: string;
-    tendencia: string;        // "S" | "D" | "M"
-    alerta_tendencia: string; // "AS" | "AM" | "AD" | "PS" | ... | "MA"
-    recent: string;           // "s" = recent, anything else = stale
-  };
+  estacao: string;
+  nome_bacia: string;
+  nivel_atual: number;
+  nivel_pre_alerta: number;
+  nivel_alerta: number;
+  nivel_inundacao: number;
+  tendencia: string;        // "S" | "D" | "M"
+  situacao: string;         // "Normal" | "Pré-alerta" | "Alerta" | "Inundação"
+  recente: 0 | 1;           // 1 if the sensor is recent, 0 if not.
 };
 
 export type Severity = 'NONE' | 'YELLOW' | 'RED';
@@ -98,4 +134,6 @@ export const SEVERITY_ORDER = {
   "Inundação": 3
 };
 
-
+export const OfflineSensorsNormalize = {
+  "-": 0
+};
