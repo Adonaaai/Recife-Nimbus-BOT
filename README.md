@@ -300,4 +300,3 @@ ISC License. See [LICENSE](LICENSE) for details.
 ---
 
 **Maintainer:** Adonai Artur  
-**Last updated:** June 2026
